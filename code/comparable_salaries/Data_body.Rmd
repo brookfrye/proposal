@@ -50,9 +50,12 @@ cst_range <- csts[title %in% crs_codes]
 #### Data Scientist titles
 
 The (in house) City Council Data Scientist title, and its promotional title, Senior Data Scientist, includes the follow duties:
-- Work closely with legislative attorneys and policy analysts to research policy issues, and suggest recommendations.
-- Support the team in building & deploying data products & tools.
-- Perform data cleaning & validation, conduct exploratory analysis, provide statistical inferences, develop models, and visualize and present findings and insights.
+
+-   Work closely with legislative attorneys and policy analysts to research policy issues, and suggest recommendations.
+-   Support the team in building & deploying data products & tools.
+-   Perform data cleaning & validation, conduct exploratory analysis, provide statistical inferences, develop models, and visualize and present findings and insights.
+
+To be hired, this title must have a strong background in statistics and while not required, a Master's Degree is preferred.
 
 ```{r}
 dsp <- ds[
@@ -111,9 +114,9 @@ gt::gt(
 
 ------------------------------------------------------------------------
 
-City Research Scientists are used here as this title includes the 'Data Scientist' business title at the City. The title is responsible for independent data analysis, methodological design, and analytic reporting. 
+City Research Scientists are used here as this title includes the 'Data Scientist' business title at the City. The title is responsible for independent data analysis, methodological design, and analytic reporting.
 
-Salaries are set by a level system. We exclude level 1 as it non-technical (primarily data entry and collection roles) and the Data Science title at the City Council is technical and requires a background in statistics.
+Salaries are set by a level system. We exclude Level I as it non-technical (primarily data entry and collection roles) and the Data Science title at the City Council is technical and requires a background in statistics.
 
 ```{r}
 cst_range <- cst_range[asg_lvl %in% c("02", "03")]

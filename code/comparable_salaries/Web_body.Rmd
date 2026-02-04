@@ -52,7 +52,12 @@ cst_range <- csts[title %in% cs_codes]
 
 #### Web Developer
 
-City Council Web Developers design, build, and maintain web applications that support legislative operations, transparency, and internal workflows. Typical work includes full-stack development, accessibility and security practices, deployment and maintenance, and collaboration with policy and data staff.
+City Council Web Developers design, build, and maintain web applications that support legislative operations, transparency, and internal workflows. Typical work includes:
+
+-   Full-stack development
+-   Accessibility and security practices
+-   Deployment and maintenance
+-   And collaboration with policy and data staff
 
 ```{r}
 webp <- web[
@@ -102,21 +107,25 @@ gt::gt(
 
 ------------------------------------------------------------------------
 
-NYC civil service materials describe Computer Specialists (Software) as responsible for the analysis, design, development, implementation, enhancement, maintenance, and security of software systems, including applications and websites. [@dcas_css_exam_notice]
+Computer Specialists (Software) levels II and III
 
+have the most comparable duties to City Council Web Developers, as they are responsible for the following with respect to software systems, websites and applications:
 
+-   Design
+-   Development
+-   Implementation
+-   Maintenance
+-   Security of software systems
 
-NYC Jobs postings for Computer Specialist (Software) II and Computer Specialist (Software), Level III list minimum qualifications requiring a baccalaureate degree (including or supplemented by 24 credits in computer science or a related field) and two years of satisfactory full-time software experience in designing, programming, debugging, maintaining, implementing, and enhancing software applications (plus leadership/complex project contribution language). [@nycjobs_css_level2; @nycjobs_css_level3]
-
-Level I is excluded because it can function as an entry/trainee tier, while Council web roles generally require independent delivery and ongoing application ownership.
+Level I is excluded because it can function as an entry/trainee tier, while Council web roles generally require independent delivery and ongoing application ownership. [@nycjobs_css_level2; @nycjobs_css_level3]
 
 ```{r}
 
   cst_range_sub <- cst_range[asg_lvl %in% c("11", "111")]
 
   cst_range_sub[, `Level (City)` := data.table::fcase(
-    asg_lvl == "11", "Level II (11)",
-    asg_lvl == "111", "Level III (111)",
+    asg_lvl == "02", "Level II",
+    asg_lvl == "03", "Level III",
     default = asg_lvl
   )]
 

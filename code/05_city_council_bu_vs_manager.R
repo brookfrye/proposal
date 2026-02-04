@@ -5,6 +5,7 @@ library(jsonlite)
 root_dir <- find_root(has_file("proposal.Rproj"))
 data_dir <- file.path(root_dir, "data")
 dir.create(data_dir, showWarnings = FALSE, recursive = TRUE)
+source(file.path(root_dir, "code", "00_depends.R"))
 
 # ---- Config ----
 DATASET_ID <- "k397-673e"
@@ -16,6 +17,9 @@ FY_START <- 2018L
 FY_END <- 2025L
 AGENCY_EXACT <- "CITY COUNCIL"
 ACTIVE_LABEL <- "ACTIVE"
+
+# Explicit bargaining unit titles provided by user
+
 
 PAGE_SIZE <- 50000L
 MAX_PAGES <- 200L
@@ -85,8 +89,13 @@ col_title <- field_from_name(cols, c("title description", "job title", "title"))
 col_status <- field_from_name(cols, c("leave status", "status"), required = FALSE)
 col_base <- field_from_name(cols, c("base salary", "base"))
 col_bu <- field_from_name(cols, c("bargaining unit", "bargain"), required = FALSE)
+col_first <- field_from_name(cols, c("^first name$", "first name"), required = FALSE)
+col_last <- field_from_name(cols, c("^last name$", "last name"), required = FALSE)
+col_mid <- field_from_name(cols, c("^mid init$", "middle", "mid"), required = FALSE)
 
-select_cols <- unique(na.omit(c(col_fy, col_agency, col_title, col_status, col_base, col_bu)))
+select_cols <- unique(na.omit(c(
+  col_fy, col_agency, col_title, col_status, col_base, col_bu, col_first, col_last, col_mid
+)))
 
 # ---- Download (prefer agency filter, fallback if empty) ----
 where_base <- sprintf("%s >= %d AND %s <= %d", col_fy, FY_START, col_fy, FY_END)
@@ -121,6 +130,9 @@ pay[, agency_name := as.character(get(col_agency))]
 pay[, title_description := as.character(get(col_title))]
 if (!is.na(col_status)) pay[, status := as.character(get(col_status))]
 pay[, base_salary := as.numeric(get(col_base))]
+if (!is.na(col_first)) pay[, first_name := as.character(get(col_first))]
+if (!is.na(col_last)) pay[, last_name := as.character(get(col_last))]
+if (!is.na(col_mid)) pay[, mid_init := as.character(get(col_mid))]
 
 # If agency filter was skipped or too broad, filter locally
 if (nrow(pay) > 0L) {
@@ -134,26 +146,15 @@ if ("status" %in% names(pay)) {
   message("No status column found; skipping active-only filter.")
 }
 
-# Bargaining unit handling
-if (!is.na(col_bu)) {
-  pay[, barg_unit := as.character(get(col_bu))]
-} else {
-  csts_path <- file.path(data_dir, "civ_serv_data_for_titles.csv")
-  if (file.exists(csts_path)) {
-    csts <- fread(csts_path, select = c("title_description", "barg_unit", "barg_descr"))
-    pay <- merge(pay, csts, by = "title_description", all.x = TRUE)
-  } else {
-    message("No bargaining unit column and civ_serv_data_for_titles.csv missing; bargaining unit comparisons may be incomplete.")
-    pay[, barg_unit := NA_character_]
-  }
-}
-
-# Manager definition
+# Explicit bargaining unit classification from title list
 pay[, title_upper := toupper(title_description)]
-pay[, is_manager := grepl("(ASSISTANT\\s+DEPUTY\\s+DIRECTOR|ASST\\.?\\s+DEPUTY\\s+DIRECTOR|DEPUTY\\s+DIRECTOR)", title_upper)]
+pay[, is_bu := title_upper %in% BU_TITLES]
 
-# Bargaining unit flag
-pay[, is_bu := !is.na(barg_unit) & barg_unit != "" & barg_unit != "0"]
+# Manager definition (title must include deputy/director AND name in assistant deputy list)
+manager_names <- unique(tolower(ass_deps))
+pay[, full_name := tolower(trimws(paste(first_name, last_name)))]
+pay[, is_manager := grepl("(ASSISTANT\\s+DEPUTY\\s+DIRECTOR|ASST\\.?\\s+DEPUTY\\s+DIRECTOR|DEPUTY\\s+DIRECTOR)", title_upper) &
+                    (full_name %in% manager_names)]
 
 # Grouping: manager vs bargaining unit (non-overlapping)
 pay[, group := fifelse(is_manager, "Manager",

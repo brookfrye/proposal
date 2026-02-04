@@ -43,6 +43,103 @@ Key drivers:
 -   Council salaries start lower and grow more slowly with years of experience.
 -   City pay scales exhibit stronger year-over-year compounding, particularly after \~3–5 years of tenure.
 
+#### City Council: union titles vs deputy/assistant deputy directors (FY 2018–2025)
+
+This view focuses only on City Council titles and compares median base salaries over time for:
+
+- Union titles: Legislative Counsel, Legislative Programmer/Analyst, Legislative Policy Analyst, Senior Legislative Policy Analyst
+- Manager titles: Deputy Director and Assistant Deputy Director (all variants in title text, plus name list from `00_depends.R`)
+
+```{r}
+library(data.table)
+library(ggplot2)
+library(scales)
+
+cc_path <- file.path(root_dir, "data", "city_council_payroll_2018_2025.csv")
+
+if (!file.exists(cc_path)) {
+  source(file.path(root_dir, "code", "05_city_council_bu_vs_manager.R"), chdir = TRUE)
+}
+
+if (file.exists(cc_path)) {
+  cc <- fread(cc_path)
+  
+  bu_titles <- c(
+    "LEGISLATIVE COUNSEL",
+    "LEGISLATIVE PROGRAMMER/ANALYST",
+    "LEGISLATIVE POLICY ANALYST",
+    "SENIOR LEGISLATIVE POLICY ANALYST"
+  )
+  
+  cc[, fiscal_year := as.integer(fiscal_year)]
+  cc[, title_upper := toupper(title_description)]
+  cc[, is_union := title_upper %in% bu_titles]
+  
+  if (!"is_manager" %in% names(cc)) {
+    manager_names <- unique(tolower(ass_deps))
+    if (all(c("first_name", "last_name") %in% naplmes(cc))) {
+      cc[, full_name := tolower(trimws(paste(first_name, last_name)))]
+    } else {
+      cc[, full_name := NA_character_]
+    }
+    cc[, is_manager := grepl("(ASSISTANT\\s+DEPUTY\\s+DIRECTOR|ASST\\.?\\s+DEPUTY\\s+DIRECTOR|DEPUTY\\s+DIRECTOR)", title_upper) &
+        (full_name %in% manager_names)]
+  }
+  
+  # Ensure active-only if status exists
+  if ("status" %in% names(cc)) {
+    cc <- cc[toupper(status) == "ACTIVE"]
+  }
+  
+  # Counsel filter: <110k for FY 2018–2023, <128k for FY 2024+
+  cc[, counsel_cap := fifelse(fiscal_year <= 2023L, 110000, 128000)]
+  cc[, counsel_ok := !is_union | title_upper != "LEGISLATIVE COUNSEL" | base_salary < counsel_cap]
+  
+  cc_sub <- cc[(is_union | is_manager) & counsel_ok & !is.na(base_salary) & base_salary > 0]
+  cc_sub[, title_group := fifelse(is_manager, "Deputy/Assistant Deputy Director", title_description)]
+  
+  med_trend <- cc_sub[
+    ,
+    .(median_base_salary = median(base_salary, na.rm = TRUE), n = .N),
+    by = .(fiscal_year, title_group)
+  ]
+  
+  if (nrow(med_trend) > 0) {
+    ggplot(med_trend, aes(fiscal_year, median_base_salary, color = title_group)) +
+      geom_line(linewidth = 1.2) +
+      scale_x_continuous(breaks = seq(2018, 2025, by = 1)) +
+      scale_y_continuous(labels = dollar) +
+      scale_color_manual(
+        values = c(
+          "Deputy/Assistant Deputy Director" = "#C0392B",
+          "LEGISLATIVE COUNSEL" = "black",
+          "LEGISLATIVE PROGRAMMER/ANALYST" = "black",
+          "LEGISLATIVE POLICY ANALYST" = "black",
+          "SENIOR LEGISLATIVE POLICY ANALYST" = "black"
+        )
+      ) +
+      labs(
+        title = "City Council median base salary trends by title (FY 2018–2025)",
+        subtitle = "Legislative Counsel filtered to < $110k for FY 2018–2023 and < $128k for FY 2024–2025; active employees only.",
+        x = "Fiscal year",
+        y = "Median base salary",
+        color = "Title"
+      ) +
+      theme_minimal(base_size = 13) +
+      theme(
+        legend.position = "top",
+        panel.grid.minor = element_blank()
+      )
+  } else {
+    message("No data after filters; check salary caps or manager/union filters.")
+  }
+} else {
+  message("Missing data/city_council_payroll_2018_2025.csv. Run code/05_city_council_bu_vs_manager.R first.")
+}
+```
+
+Summary: Union titles (black) move together and remain below the deputy/assistant deputy director manager line (red) across the full 2018–2025 period, indicating a persistent managerial premium rather than a short-term fluctuation.
+
 #### FY 2025 snapshot (Council, active employees in bargaining unit)
 
 Takeaways from the table:

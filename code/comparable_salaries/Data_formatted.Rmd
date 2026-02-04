@@ -134,7 +134,7 @@ gt::gt(
 
 City Research Scientists are used here as this title encompasses the 'Data Scientist' business title at the City. The title is responsible for independent data analysis, methodological design, and analytic reporting. 
 
-Salaries are set by a level system. We exclude level 1 as it non-technical (primarily data entry and collection roles) and the Data Science title at the City Council is technical and requires a background in statistics.
+Salaries are set by a level system. We exclude Level I as it non-technical (primarily data entry and collection roles) and the Data Science title at the City Council is technical and requires a background in statistics.
 
 ```{r}
 cst_range <- cst_range[asg_lvl %in% c("02", "03")]

@@ -84,7 +84,3 @@ counsel <- c(
   "LEGISLATIVE COUNSEL",
   "*ATTORNEY AT LAW", 
   "ATTORNEY AT LAW")      
-data <- "CITY RESEARCH SCIENTIST"   
-web <- 
-  "COMPUTER SPECIALIST"
-

@@ -12,6 +12,7 @@ pol_codes <- c("12626", "12627") # associate, admin, staff
 csts <- fread("https://data.cityofnewyork.us/resource/nzjr-3966.csv?$limit=99999")
 cst_range <-csts[title %in% pol_codes & !asg_lvl == "01", ]
 ```
+
 #### Legislative Policy Analyst
 
 The City Council Legislative Policy Analyst title includes the following responsibilities:
@@ -82,7 +83,9 @@ gt::gt(lcp[fiscal_year == "2025",
 
 ------------------------------------------------------------------------
 
-City Council Legislative Policy Analysts perform work that is functionally comparable to the City Staff Analyst track, including independent policy and legal analysis, research and evaluation of laws and programs, preparation of written analytical materials, and coordination with attorneys, policy staff, and stakeholders.
+City Council Legislative Policy Analysts perform work that is functionally comparable to the City Staff Analyst track, which includes:
+
+independent policy and legal analysis, research and evaluation of laws and programs, preparation of written analytical materials, and coordination with attorneys, policy staff, and stakeholders.
 
 The Staff Analyst track includes two (non-managerial) titles:
 

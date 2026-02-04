@@ -20,25 +20,26 @@ editor_options:
 
 ```{r include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
-```
-
-## Legislative Counsel
-```{r child="code/Counsel_body.Rmd"}
+library(rprojroot)
+root_dir <- find_root(has_file("proposal.Rproj"))
+knitr::opts_knit$set(root.dir = root_dir)
 ```
 
 ## Data Scientist
-```{r child="code/Data_body.Rmd"}
+```{r child="code/comparable_salaries/Data_body.Rmd"}
+```
+## Legislative Policy Analyst
+```{r child="code/comparable_salaries/Policy_body.Rmd"}
 ```
 
-## Policy Analyst
-```{r child="code/Policy_body.Rmd"}
+## Legislative Counsel
+```{r child="code/comparable_salaries/Counsel_body.Rmd"}
 ```
+
 
 ## Web Developer
-```{r child="code/Web_body.Rmd"}
+```{r child="code/comparable_salaries/Web_body.Rmd"}
 ```
 ## Sources
-```{r child="code/references.Rmd"}
-
+```{r child="code/comparable_salaries/references.Rmd"}
 ```
-
