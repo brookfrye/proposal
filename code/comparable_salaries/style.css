@@ -1,0 +1,8 @@
+/* Professional memo-like styling */
+body { font-size: 16px; line-height: 1.55; }
+h1, h2, h3 { margin-top: 1.2em; }
+.caption, figcaption { font-size: 0.9em; color: #666; }
+.main-container { max-width: 1100px; }
+
+/* Keep references section calm */
+#references > h1, #references > h2 { font-size: 1.1em; font-weight: 600; }

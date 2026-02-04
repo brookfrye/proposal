@@ -1,0 +1,339 @@
+---
+title: 'Salary Growth: City vs City Council (FY 2025)'
+output:
+  html_document:
+    theme: cosmo
+    toc: true
+    toc_depth: 2
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+library(rprojroot)
+root_dir <- find_root(has_file("proposal.Rproj"))
+knitr::opts_knit$set(root.dir = root_dir)
+# ---- Sources ----
+source(file.path(root_dir, "code", "00_depends.R"))
+source(file.path(root_dir, "code", "04_attrition.R"), chdir = TRUE)
+
+years_cap <- 10
+
+# ---- Data paths ----
+fy25       <- file.path(root_dir, "data", "fy25_sal_active.csv")
+all_years  <- file.path(root_dir, "data", "salary_data_2018-2025_attrition.csv")
+titles_grp_levels <- file.path(root_dir, "data", "titles_groups_levels.csv")
+
+# ---- Load data ----
+dt25   <- fread(fy25)
+dtall  <- fread(all_years)
+titles_grps <- fread(titles_grp_levels)
+
+# ---- Prep ----
+dt25[, year_exp_round := round(years_exp, 0)]
+dt25_cc <- dt25[sys == "council"]
+
+```
+
+### Overview
+
+Across policy, data, and web and counsel roles, City Council salaries in the bargaining unit remain consistently below comparable City titles at nearly every level of experience in FY 2025. The gap is largest for senior roles and widens with tenure, indicating that Council staff experience slower cumulative salary growth, not just lower starting pay.
+
+Key drivers:
+
+-   Council salaries start lower and grow more slowly with years of experience.
+-   City pay scales exhibit stronger year-over-year compounding, particularly after \~3–5 years of tenure.
+
+#### FY 2025 snapshot (Council, active employees in bargaining unit)
+
+Takeaways from the table:
+
+-   Median tenure varies sharply by team and level, reinforcing that junior vs senior distinctions matter analytically.
+-   Salary interquartile ranges (P25–P75) are relatively tight within levels, suggesting:
+  -   Limited upside growth once senior status is reached
+  -   Median senior salaries cluster well below City counterparts shown later in the report.
+
+```{r}
+
+cc_snap <- dt25_cc[
+  ,
+  .(
+    n = .N,
+    tenure_min = abs(round(min(years_exp, na.rm = TRUE), 2)),
+    tenure_median = abs(round(median(years_exp, na.rm = TRUE), 2)),
+    tenure_max = round(max(years_exp, na.rm = TRUE), 2),
+    salary_median = median(base_salary, na.rm = TRUE),
+    salary_p25 = quantile(base_salary, 0.25, na.rm = TRUE),
+    salary_p75 = quantile(base_salary, 0.75, na.rm = TRUE)
+  ),
+  by = .(team_level)
+]
+
+DT::datatable(cc_snap, options = list(
+    pageLength = 8,
+    lengthChange = FALSE,
+    paging = FALSE,  
+    searching = FALSE
+  ))
+```
+
+------------------------------------------------------------------------
+
+### Median salary gaps
+
+In FY 2025, Council median salaries are below City medians for nearly all grp × level combinations.
+
+The largest negative gaps occur among
+
+-   Senior policy roles
+-   Senior data/web roles with 5+ years of experience
+
+These gaps reflect both lower base pay and slower growth trajectories.
+
+
+```{r}
+# median gaps by sys / grp / level
+medians <- dt25[
+  sys %in% c("city", "council"),
+  .(
+    median_salary = as.numeric(median(as.numeric(base_salary), na.rm = TRUE)),
+    n = .N
+  ),
+  by = .(sys, grp, level)
+]
+
+wide_med <- dcast(medians, grp + level ~ sys, value.var = "median_salary", fill = NA_real_)
+wide_n <- dcast(medians, grp + level ~ sys, value.var = "n", fill = 0)
+
+gap_table <- merge(wide_med, wide_n, by = c("grp", "level"), suffixes = c("_median", "_n"))
+gap_table <- type.convert(gap_table, as.is = TRUE)
+gap_table[, `:=`(
+  city_median = as.numeric(city_median),
+  council_median = as.numeric(council_median),
+  city_n = as.integer(city_n),
+  council_n = as.integer(council_n)
+)]
+
+gap_table[, diff := council_median - city_median]
+
+
+# pull biggest gaps for bullets
+top_gaps <- gap_table[!is.na(diff)][order(diff)]
+
+DT::datatable(
+  gap_table[order(grp, level)]
+)
+```
+
+
+#### Salary by years of experience (FY 2025)
+For NYCC:
+-   Median salary rises with experience, but the slope flattens quickly, especially for senior roles.
+-   Junior staff experience modest gains in early years, but do not converge toward City pay levels over time.
+-   Senior roles do not show sustained growth proportional to tenure beyond mid-career.
+
+
+Model interpretation:
+
+-   The log-linear model estimates salary as a function of:
+-   Years of experience
+-   sys (City vs Council)
+-   grp (policy, data, web)
+-   Level (junior, senior)
+-   Holding experience, grp, and level constant, City salaries grow faster with tenure than Council salaries, producing widening gaps over time.
+
+**note** starting salaries for Legislative Counsel at City Council are set based on years out of law school
+
+```{r}
+library(data.table)
+library(ggplot2)
+library(scales)
+library(stringr)
+
+# -----------------------------
+# Prep
+# -----------------------------
+dt <- dt25[
+  year_exp_round <= years_cap &
+    !is.na(base_salary) & base_salary > 0 &
+    sys %in% c("city", "council")
+]
+
+# Create display panel label with NO "junior"
+# junior -> "data"; senior -> "Senior data"
+# Build display panel label (Capitalized, no "junior")
+dt[, panel := fifelse(
+  level == "senior",
+  paste("Senior", tools::toTitleCase(grp)),
+  tools::toTitleCase(grp)
+)]
+
+# Order panels: grp → Senior grp
+grp_order <- sort(unique(tools::toTitleCase(dt$grp)))
+panel_levels <- as.vector(rbind(
+  grp_order,
+  paste("Senior", grp_order)
+))
+
+dt[, panel := factor(panel, levels = panel_levels)]
+
+
+dt[, sys := factor(sys, levels = c("city", "council"))]
+dt[, log_salary := log(base_salary)]
+
+# -----------------------------
+# Drop "weird low" points:
+# remove any tenure-bin point where the median is below the overall median
+# for that sys × panel (e.g., 10-year point that dips unrealistically low)
+# -----------------------------
+overall_median <- dt[, .(overall_med = median(base_salary, na.rm = TRUE)),
+                     by = .(sys, panel)]
+
+obs_medians <- dt[
+  ,
+  .(median_salary = median(base_salary, na.rm = TRUE), n = .N),
+  by = .(sys, panel, years_exp = year_exp_round)
+][
+  overall_median, on = .(sys, panel)
+][
+  median_salary >= overall_med   # <-- filter out low outlier bins
+]
+
+# -----------------------------
+# Model: allow different slopes by sys AND panel
+# -----------------------------
+lm_growth <- lm(log_salary ~ years_exp * sys * panel, data = dt)
+
+# -----------------------------
+# Fitted lines grid:
+# restrict to observed tenure range per sys × panel
+# -----------------------------
+ranges <- obs_medians[, .(
+  min_year = min(years_exp, na.rm = TRUE),
+  max_year = max(years_exp, na.rm = TRUE)
+), by = .(sys, panel)]
+
+pred_grid <- ranges[
+  ,
+  .(years_exp = seq(min_year, max_year)),
+  by = .(sys, panel)
+]
+
+pred_grid[, fitted_salary := exp(predict(lm_growth, newdata = .SD))]
+
+# nicer facet titles
+lab_wrap <- function(x) str_wrap(x, width = 14)
+
+# -----------------------------
+# Plot
+# -----------------------------
+ggplot() +
+  geom_point(
+    data = obs_medians,
+    aes(years_exp, median_salary, color = sys),
+    alpha = 0.55,
+    size = 2
+  ) +
+  geom_line(
+    data = pred_grid,
+    aes(years_exp, fitted_salary, color = sys),
+    linewidth = 1.4
+  ) +
+  facet_wrap(~panel, scales = "free_y", labeller = labeller(panel = lab_wrap)) +
+  scale_y_continuous(labels = dollar) +
+  scale_x_continuous(breaks = seq(0, years_cap, by = 5), minor_breaks = NULL) +
+  labs(
+    title = "Base salary vs tenure by role and system (FY 2025)",
+    subtitle = "Points: observed medians by rounded tenure (excluding bins below the overall median for that role). Lines: fitted log-linear model within observed tenure range.",
+    x = "Years (rounded)",
+    y = "Base salary",
+    color = "System"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position = "top",
+    strip.text = element_text(face = "bold", size = 12),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(size = 10)
+  )
+
+
+```
+
+Plot shows:
+
+-   Dots: observed median salaries at each experience level
+-   Lines: fitted salary trajectories from the model
+-   Vertical separation: persistent City–Council gaps
+-   Diverging slopes: slower cumulative growth at Council
+
+#### Attrition
+
+```{r attrition_summary, echo=FALSE}
+latest_year <- max(cmp$year_to, na.rm = TRUE)
+attr_summary <- cmp[year_to == latest_year]
+avg_attr <- cmp[, .(
+  cc_avg = mean(cc_attrition, na.rm = TRUE),
+  city_avg = mean(city_attrition, na.rm = TRUE),
+  gap_pp = mean(attrition_gap_pp, na.rm = TRUE)
+)]
+```
+
+Salary growth patterns are closely linked to retention. In FY `r latest_year`, Council BU attrition was `r scales::percent(attr_summary$cc_attrition, accuracy = 0.1)` vs Citywide `r scales::percent(attr_summary$city_attrition, accuracy = 0.1)` (gap: `r round(attr_summary$attrition_gap_pp, 1)` pp). Averaged across available years, Council attrition is `r scales::percent(avg_attr$cc_avg, accuracy = 0.1)` vs Citywide `r scales::percent(avg_attr$city_avg, accuracy = 0.1)` (avg gap: `r round(avg_attr$gap_pp, 1)` pp).
+
+```{r}
+p1
+p3
+```
+
+#### Methods
+
+-   Data: NYC payroll records
+-   Sample: Active employees only for FY 2025 comparisons in bargaining unit and comparable titles
+-   Salary measure: Base salary (log-transformed for modeling)
+-   Tenure: Years since agency start date, capped at 10 years
+-   Model: Log-linear regression with controls for sys, grp, and level
+
+```{r}
+library(data.table)
+
+# dt = your table shown above
+# (assumes columns: title_description, grp, level, asg_lvl, sys)
+
+# 1) Split into council vs city titles
+council_titles <- unique(dt[sys == "council",
+  .(council_title = title_description, grp, level)
+])
+
+city_titles <- dt[sys == "city",
+  .(city_title = title_description, grp, level, asg_lvl)
+]
+
+# 2) Build mapping table: each Council (grp, level, title) → all City titles in same (grp, level)
+map_long <- city_titles[council_titles, on = .(grp, level), allow.cartesian = TRUE][
+  ,
+  .(
+    council_title,
+    grp,
+    level,
+    city_title,
+    city_asg_lvl = asg_lvl
+  )
+][
+  order(grp, level, council_title, city_title, city_asg_lvl)
+]
+
+# 3) Wide/pretty version: City titles collapsed into a single cell per Council title+level
+map_wide <- map_long[
+  ,
+  .(
+    city_titles = paste(unique(sprintf("%s (asg %s)", city_title, city_asg_lvl)),
+                        collapse = "; ")
+  ),
+  by = .(council_title, grp, level)
+][order(grp, level, council_title)]
+
+
+gt::gt(map_wide)   # one row per council title (preferred for a report
+
+
+```

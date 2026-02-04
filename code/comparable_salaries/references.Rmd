@@ -1,0 +1,29 @@
+---
+title: ""
+output:
+  html_document:
+    theme: cosmo
+    toc: false
+    number_sections: false
+    highlight: tango
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+bibliography: references.bib
+
+link-citations: true
+citeproc: true
+nocite: '@*'
+editor_options:
+  markdown:
+    wrap: sentence
+---
+
+```{r}
+
+```
+
+
+------------------------------------------------------------------------
+
+
+::: {#refs}
+:::

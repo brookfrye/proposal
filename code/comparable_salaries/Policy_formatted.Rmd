@@ -1,0 +1,122 @@
+---
+title: "Policy Analysts and Comparable City Titles"
+output:
+  html_document:
+    theme: cosmo
+    toc: false
+    number_sections: false
+    highlight: tango
+    css: style.css
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+bibliography: references.bib
+link-citations: true
+citeproc: true
+nocite: '@*'
+editor_options:
+  markdown:
+    wrap: sentence
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+library(rprojroot)
+root_dir <- find_root(has_file("proposal.Rproj"))
+source(file.path(root_dir, "code/00_depends.R"))
+# robust file path (works if you put it in /data; otherwise adjust)
+data_dir <- file.path(root_dir, "data")
+barg_path <- file.path(data_dir, "barg_units_group_levels.csv")
+barg <- fread(barg_path)
+
+pol_codes <- c("12626", "12627") # associate, admin, staff 
+csts <- fread("https://data.cityofnewyork.us/resource/nzjr-3966.csv?$limit=99999")
+cst_range <-csts[title %in% pol_codes & !asg_lvl == "01", ]
+```
+
+The Legislative Policy Analyst title includes the following responsibilities:
+
+-   Work closely with Legislative Attorneys and Policy Analysts to analyze legal and Policy issues.
+-   Conduct policy research and analysis, managing relationships with stakeholders.
+-   Assist in the preparation of committee hearings.
+-   Draft committee and oversight reports.
+
+To be hired, this title must have policy experience in a relevant area, have superior research and analytic skills, and while not required, a Master's Degree is preferred.
+
+```{r}
+lc <- barg[
+  group == "policy", ]
+
+lcp <- lc[
+  , .(
+    n = .N,
+    median_base_salary = median(base_salary, na.rm = TRUE),
+    mean_tenure_years = mean(tenure_years)
+  ),
+  by = .(fiscal_year, level)
+][order(fiscal_year)]
+```
+
+```{r}
+lcp[, fiscal_year := as.integer(fiscal_year)]
+ggplot(lcp, aes(
+  x = fiscal_year,
+  y = median_base_salary
+)) +
+  geom_line(linewidth = 1) +
+  geom_point() +
+  scale_x_continuous(breaks = lc$fiscal_year) +
+  scale_y_continuous(labels = label_dollar()) +
+  # scale_size_continuous(
+  #   name = "Mean tenure (years)",
+  #   range = c(2, 6)
+  # ) +
+  labs(
+    title = "Median base salary for Legislative Policy Analyst titles",
+    subtitle = "FY 2018–2025",
+    x = "Fiscal year",
+    y = "Median base salary ($)",
+    caption = "Source: NYC Open Data, Citywide Payroll Data (Fiscal Year)"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid.minor = element_blank(),
+    plot.title.position = "plot",
+    plot.caption = element_text(size = 9, color = "grey40", hjust = 0),
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 9)
+  ) + facet_wrap(~level)
+```
+
+```{r}
+gt::gt(lcp[fiscal_year == "2025",
+           .(`Fiscal Year` = fiscal_year, Level = level, N = n, 
+             `Median Base Salary` = median_base_salary, 
+             `Average Tenure (years)` = round(mean_tenure_years, 2))]) %>%
+  fmt_currency(
+    columns = `Median Base Salary`,
+    currency = "USD",
+    decimals = 0
+  )
+```
+
+------------------------------------------------------------------------
+
+City Council Legislative Policy Analysts perform work that is functionally comparable to the City Staff Analyst track, including independent policy and legal analysis, research and evaluation of laws and programs, preparation of written analytical materials, and coordination with attorneys, policy staff, and stakeholders.
+
+The Staff Analyst track includes two (non-managerial) titles:
+
+-   Staff Analyst (levels I and II)
+-   Associate Staff Analyst
+
+We remove Staff Analyst level I because the responsibilities and qualifications are considerably less than that of a Legislative Policy Analyst and use Staff Analyst level II as the level most comparable to Legislative Policy Analyst. We use Associate Staff analyst as the most comparable City title to Senior Legislative Policy Analyst.
+
+```{r}
+cst_range$experience <- c("Master's Degree + 1 year relevant experience (or Bachelor's with 3 years relevant experience)", "Master's Degree + 2 years relevant experience (or Bachelor's with 4 years relevant experience)")
+gt(cst_range[, .(Title = descr, `Assignment Level` = asg_lvl, `Min Salary` = min_rate, `Max Salary` = max_rate, Qualifications = experience)]) %>% 
+  fmt_currency(
+    columns = c(`Min Salary`, `Max Salary`),
+    currency = "USD",
+    decimals = 0
+  )
+```
+
+Staff Analyst job desc <https://www.osaunion.org/who/main.html> Associate Staff Analyst <https://www.osaunion.org/who/main.html>

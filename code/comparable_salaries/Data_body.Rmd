@@ -1,0 +1,144 @@
+```{r include=FALSE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE
+)
+
+library(rprojroot)
+root_dir <- find_root(has_file("proposal.Rproj"))
+source(file.path(root_dir, "code/00_depends.R"))
+
+# ------------------------------------------------------------
+# Council bargaining unit data: City Council Data Scientist
+# ------------------------------------------------------------
+data_dir <- file.path(root_dir, "data")
+barg_path <- file.path(data_dir, "barg_units_group_levels.csv")
+barg <- data.table::fread(barg_path)
+
+# Standardize level labels
+barg[, level := data.table::fcase(
+  tolower(trimws(level)) == "junior", "Base",
+  tolower(trimws(level)) == "senior", "Senior",
+  default = level
+)]
+
+ds <- barg[group == "data"]
+
+
+
+# Compute tenure in years (non-negative)
+ds[, tenure_years := as.numeric((fy_start - agency_start_date) / 365)]
+ds[tenure_years < 0, tenure_years := 0]
+
+# ------------------------------------------------------------
+# Civil service title reference data (City Research Scientist proxy)
+# ------------------------------------------------------------
+# NYC Open Data: NYC Civil Service Titles (nzjr-3966)
+
+crs_codes <- c(
+  "21744" # City Research Scientist (confirm; update if you use different codes)
+)
+
+csts <- data.table::fread(
+  "https://data.cityofnewyork.us/resource/nzjr-3966.csv?$limit=99999"
+)
+
+cst_range <- csts[title %in% crs_codes]
+```
+
+#### Data Scientist titles
+
+The (in house) City Council Data Scientist title, and its promotional title, Senior Data Scientist, includes the follow duties:
+- Work closely with legislative attorneys and policy analysts to research policy issues, and suggest recommendations.
+- Support the team in building & deploying data products & tools.
+- Perform data cleaning & validation, conduct exploratory analysis, provide statistical inferences, develop models, and visualize and present findings and insights.
+
+```{r}
+dsp <- ds[
+  , .(
+    n = .N,
+    median_base_salary = median(base_salary, na.rm = TRUE),
+    mean_tenure_years = mean(tenure_years, na.rm = TRUE)
+  ),
+  by = .(fiscal_year, level)
+][order(fiscal_year, level)]
+```
+
+```{r}
+dsp[, fiscal_year := as.integer(fiscal_year)]
+
+ggplot(dsp, aes(
+  x = fiscal_year,
+  y = median_base_salary
+)) +
+  geom_line(linewidth = 1) +
+  geom_point() +
+  scale_x_continuous(breaks = sort(unique(ds$fiscal_year))) +
+  scale_y_continuous(labels = scales::label_dollar()) +
+  labs(
+    title = "Median base salary for City Council Data Scientist",
+    subtitle = "FY 2018–2025",
+    x = "Fiscal year",
+    y = "Median base salary ($)",
+    caption = "Source: NYC Open Data, Citywide Payroll Data (Fiscal Year)."
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid.minor = element_blank(),
+    plot.title.position = "plot",
+    plot.caption = element_text(size = 9, color = "grey40", hjust = 0)
+  ) +
+  facet_wrap(~level)
+
+gt::gt(
+  dsp[fiscal_year == "2025" 
+    , .(
+      `Fiscal Year` = fiscal_year,
+      N = n,
+      Level = level,
+      `Median Base Salary` = median_base_salary,
+      `Average Tenure (years)` = round(mean_tenure_years, 2)
+    )
+  ]
+) %>%
+  gt::fmt_currency(
+    columns = `Median Base Salary`,
+    currency = "USD",
+    decimals = 0
+  )
+```
+
+------------------------------------------------------------------------
+
+City Research Scientists are used here as this title includes the 'Data Scientist' business title at the City. The title is responsible for independent data analysis, methodological design, and analytic reporting. 
+
+Salaries are set by a level system. We exclude level 1 as it non-technical (primarily data entry and collection roles) and the Data Science title at the City Council is technical and requires a background in statistics.
+
+```{r}
+cst_range <- cst_range[asg_lvl %in% c("02", "03")]
+  cst_range[, experience := data.table::fcase(
+    asg_lvl == "02", "Master's Degree and relevant experience",
+    asg_lvl == "03", "2 year's experience at level 02"
+  )]
+
+
+  gt::gt(
+    cst_range[
+      ,
+      .(
+        Title = descr,
+        `Assignment Level` = asg_lvl,
+        `Min Salary` = min_rate,
+        `Max Salary` = max_rate,
+        Qualifications = experience
+      )
+    ]
+  ) %>%
+    gt::fmt_currency(
+      columns = c(`Min Salary`, `Max Salary`),
+      currency = "USD",
+      decimals = 0
+    )
+
+```

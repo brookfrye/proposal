@@ -1,0 +1,168 @@
+---
+title: "Legislative Counsel and Comparable City Titles"
+output:
+  html_document:
+    theme: cosmo
+    toc: false
+    number_sections: false
+    highlight: tango
+    css: style.css
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+bibliography: references.bib
+link-citations: true
+citeproc: true
+nocite: '@*'
+editor_options:
+  markdown:
+    wrap: sentence
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE
+)
+
+library(rprojroot)
+root_dir <- find_root(has_file("proposal.Rproj"))
+source(file.path(root_dir, "code/00_depends.R"))
+
+# ------------------------------------------------------------
+# Council bargaining unit data: Legislative Counsel
+# ------------------------------------------------------------
+data_dir <- file.path(root_dir, "data")
+barg_path <- file.path(data_dir, "barg_units_group_levels.csv")
+barg <- data.table::fread(barg_path)
+
+# Standardize level labels 
+barg[, level := data.table::fcase(
+  tolower(trimws(level)) == "junior", "Base",
+  tolower(trimws(level)) == "senior", "Senior",
+  default = level
+)]
+
+lc <- barg[group == "counsel"]
+
+# Harmonize early-year level classification thresholds
+lc[fiscal_year == 2018L & base_salary >= 90000, level := "Senior"]
+lc[fiscal_year == 2019L & base_salary >= 95000, level := "Senior"]
+
+# Remove individuals with unusually high pay in FY18–FY19
+# (likely mid-year promotions or role changes)
+drop_ids <- lc[
+  fiscal_year %in% c(2018L, 2019L) & base_salary > 115000,
+  unique(full_name)
+]
+lc <- lc[!full_name %in% drop_ids]
+
+# Cap at maximum Legislative Counsel salary in FY2025
+lc <- lc[base_salary <= 132000]
+
+# Compute tenure in years (non-negative)
+lc[, tenure_years := as.numeric((fy_start - agency_start_date) / 365)]
+lc[tenure_years < 0, tenure_years := 0]
+
+# ------------------------------------------------------------
+# Civil service title reference data (Agency Attorney proxy)
+# ------------------------------------------------------------
+# Local civil service title table (avoid network in knit)
+couns_codes <- "30087"  # Agency Attorney
+csts <- data.table::fread(
+  "https://data.cityofnewyork.us/resource/nzjr-3966.csv?$limit=99999"
+)
+cst_range <- csts[title %in% couns_codes]
+```
+
+#### Legislative Counsel 
+
+City Council Legislative Counsel and (in house title) Senior Legislative Counsel roles include the following responsibilities:
+
+-   Drafting local legislation.
+-   Conducting legal research and analyzing legal and policy issues.
+-   Managing legislation as it moves through the legislative process.
+-   Advising Council Members and staff.
+-   Coordinating with external stakeholders.
+-   Staffing one or more Council committees.
+-   Preparing committee hearings, reports, and briefing materials.
+
+Starting salary is tied to years out of law school.
+
+There are two (in house) titles within the Legislative Counsel title, Legislative Counsel and the promotional title, Senior Legislative Counsel.
+
+```{r}
+lc[, fiscal_year := as.integer(fiscal_year)]
+lcp <- lc[
+  , .(
+    n = .N,
+    median_base_salary = median(base_salary, na.rm = TRUE),
+    mean_tenure_years = mean(tenure_years)
+  ),
+  by = .(fiscal_year, level)
+][order(fiscal_year, level)]
+```
+
+```{r}
+
+ggplot(lcp, aes(
+  x = fiscal_year,
+  y = median_base_salary
+)) +
+  geom_line(linewidth = 1) +
+  geom_point() +
+  scale_x_continuous(breaks = lc$fiscal_year) +
+  scale_y_continuous(labels = label_dollar()) +
+  scale_size_continuous(
+    name = "Mean tenure (years)",
+    range = c(2, 6)
+  ) +
+  labs(
+    title = "Median base salary for Legislative Counsel",
+    subtitle = "FY 2018–2025",
+    x = "Fiscal year",
+    y = "Median base salary ($)",
+    caption = "Source: NYC Open Data, Citywide Payroll Data (Fiscal Year) (@nyc_payroll)"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid.minor = element_blank(),
+    plot.title.position = "plot",
+    plot.caption = element_text(size = 9, color = "grey40", hjust = 0),
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 9)
+  ) +  facet_wrap(~level)
+
+```
+
+```{r}
+gt::gt(lcp[,.(`Fiscal Year` = fiscal_year, N = n, Level = level, `Median Base Salary` = median_base_salary, `Average Tenure (years)` = round(mean_tenure_years, 2))])  %>% 
+  fmt_currency(
+    columns = `Median Base Salary`,
+    currency = "USD",
+    decimals = 0
+  )
+```
+
+------------------------------------------------------------------------
+
+Agency Attorneys are used here as the closest citywide proxy for Legislative Counsel roles, as they have similar or overlapping responsibilities, which include developing policy recommendations, serving as the liaison with external regulators, and preparing documentation for proceedings or inquiries. See @nyc_jobs.
+
+Salaries are set using defined levels and increase with tenure. See @nyc_position_schedule.
+
+```{r}
+cst_range[, experience := fcase(
+  asg_lvl == "01", "0 years",
+  asg_lvl == "02", "1–2 years",
+  asg_lvl == "03", "2–3 years",
+  asg_lvl == "04", "Greater than 3 years"
+)]
+
+gt(cst_range[, .(Title = descr, `Assignment Level` = asg_lvl, `Min Salary` = min_rate, `Max Salary` = max_rate, Qualifications = experience)]) %>% 
+  fmt_currency(
+    columns = c(`Min Salary`, `Max Salary`),
+    currency = "USD",
+    decimals = 0
+  )
+```
+
+# References

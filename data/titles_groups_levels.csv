@@ -1,0 +1,26 @@
+title_description,group,level,asg_lvl,system
+CITY RESEARCH SCIENTIST,data,senior,03,city
+CITY RESEARCH SCIENTIST,data,junior,02,city
+COMPUTER SPECIALIST,web,junior,02,city
+ADMINISTRATIVE STAFF ANALYST,policy,senior,00,city
+AGENCY ATTORNEY,counsel,senior,03,city
+STAFF ANALYST,policy,junior,02,city
+AGENCY ATTORNEY,counsel,junior,01,city
+AGENCY ATTORNEY,counsel,senior,04,city
+COMPUTER SPECIALIST,web,junior,01,city
+COMPUTER SPECIALIST,web,senior,04,city
+AGENCY ATTORNEY,counsel,junior,02,city
+ASSOCIATE STAFF ANALYST,policy,senior,00,city
+CITY RESEARCH SCIENTIST,data,junior,01,city
+COMPUTER SPECIALIST,web,senior,03,city
+CITY RESEARCH SCIENTIST,data,senior,4A,city
+LEGISLATIVE PROGRAMMER/ANALYST,web,senior,00,council
+LEGISLATIVE COUNSEL,counsel,junior,00,council
+LEGISLATIVE COUNSEL,counsel,senior,00,council
+IT INFRASTRUCTURE ENGINEER,web,,00,city
+LEGISLATIVE POLICY ANALYST,policy,junior,00,council
+SENIOR LEGISLATIVE POLICY ANALYST,policy,senior,00,council
+LEGISLATIVE PROGRAMMER/ANALYST,data,junior,00,council
+LEGISLATIVE PROGRAMMER/ANALYST,web,junior,00,council
+LEGISLATIVE PROGRAMMER/ANALYST,data,senior,00,council
+AGENCY ATTORNEY DC37,counsel,senior,04,city

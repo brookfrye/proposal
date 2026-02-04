@@ -1,0 +1,6 @@
+source('code/00_depends.R')
+all_sals <- fread("data/salary_data_2018-2025_attrition.csv")
+all_sals_act <- all_sals[leave_status_as_of_june_30 == 'ACTIVE']
+cc <- all_sals_act[agency_name == 'CITY COUNCIL']
+cc[, full_name := tolower(full_name)]
+

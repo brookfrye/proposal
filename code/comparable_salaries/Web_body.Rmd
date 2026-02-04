@@ -1,0 +1,136 @@
+```{r include=FALSE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE
+)
+
+library(data.table)
+library(ggplot2)
+library(scales)
+library(gt)
+library(rprojroot)
+
+# Use project root (stable when knitting)
+root_dir <- find_root(has_file("proposal.Rproj"))
+knitr::opts_knit$set(root.dir = root_dir)
+
+source(file.path(root_dir, "code/00_depends.R"))
+
+# ------------------------------------------------------------
+# Council bargaining unit data: Web
+# ------------------------------------------------------------
+data_dir <- file.path(root_dir, "data")
+barg_path <- file.path(data_dir, "barg_units_group_levels.csv")
+barg <- data.table::fread(barg_path)
+
+barg[, level := data.table::fcase(
+  tolower(trimws(level)) == "junior", "Base",
+  tolower(trimws(level)) == "senior", "Senior",
+  default = level
+)]
+
+web <- barg[group == "web"]
+
+# Tenure in years (non-negative)
+web[, tenure_years := as.numeric((fy_start - agency_start_date) / 365)]
+web[tenure_years < 0, tenure_years := 0]
+
+# ------------------------------------------------------------
+# City comparable: Computer Specialist (Software) (Title 1362 / 13632 series)
+# ------------------------------------------------------------
+# NOTE: some NYC materials use 13632 for Computer Specialist (Software).
+# If your dataset uses 1362, keep it; otherwise 13632 is the common DCAS code.
+cs_codes <- c("1362", "13632")
+
+csts <- data.table::fread(
+  "https://data.cityofnewyork.us/resource/nzjr-3966.csv?$limit=99999"
+)
+
+cst_range <- csts[title %in% cs_codes]
+```
+
+#### Web Developer
+
+City Council Web Developers design, build, and maintain web applications that support legislative operations, transparency, and internal workflows. Typical work includes full-stack development, accessibility and security practices, deployment and maintenance, and collaboration with policy and data staff.
+
+```{r}
+webp <- web[
+  , .(
+    n = .N,
+    median_base_salary = median(base_salary, na.rm = TRUE),
+    mean_tenure_years  = mean(tenure_years, na.rm = TRUE)
+  ),
+  by = .(fiscal_year, level)
+][order(fiscal_year, level)]
+
+webp[, fiscal_year := as.integer(fiscal_year)]
+```
+
+```{r}
+ggplot(webp, aes(x = fiscal_year, y = median_base_salary)) +
+  geom_line(linewidth = 1) +
+  geom_point() +
+  scale_x_continuous(breaks = sort(unique(webp$fiscal_year))) +
+  scale_y_continuous(labels = scales::label_dollar()) +
+  labs(
+    title = "Median base salary for City Council Web Developers",
+    subtitle = "FY 2018–2025",
+    x = "Fiscal year",
+    y = "Median base salary ($)",
+    caption = "Source: NYC Open Data, Citywide Payroll Data (Fiscal Year)."
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(panel.grid.minor = element_blank()) +
+  facet_wrap(~level)
+```
+
+```{r}
+gt::gt(
+  webp[fiscal_year == "2025"
+    , .(
+      `Fiscal Year` = fiscal_year,
+      Level = level,
+      N = n,
+      `Median Base Salary` = median_base_salary,
+      `Average Tenure (years)` = round(mean_tenure_years, 2)
+    )
+  ]
+)  %>% 
+  gt::fmt_currency(columns = `Median Base Salary`, currency = "USD", decimals = 0)
+```
+
+------------------------------------------------------------------------
+
+NYC civil service materials describe Computer Specialists (Software) as responsible for the analysis, design, development, implementation, enhancement, maintenance, and security of software systems, including applications and websites. [@dcas_css_exam_notice]
+
+
+
+NYC Jobs postings for Computer Specialist (Software) II and Computer Specialist (Software), Level III list minimum qualifications requiring a baccalaureate degree (including or supplemented by 24 credits in computer science or a related field) and two years of satisfactory full-time software experience in designing, programming, debugging, maintaining, implementing, and enhancing software applications (plus leadership/complex project contribution language). [@nycjobs_css_level2; @nycjobs_css_level3]
+
+Level I is excluded because it can function as an entry/trainee tier, while Council web roles generally require independent delivery and ongoing application ownership.
+
+```{r}
+
+  cst_range_sub <- cst_range[asg_lvl %in% c("11", "111")]
+
+  cst_range_sub[, `Level (City)` := data.table::fcase(
+    asg_lvl == "11", "Level II (11)",
+    asg_lvl == "111", "Level III (111)",
+    default = asg_lvl
+  )]
+
+  gt::gt(
+    cst_range_sub[
+      , .(
+        Title = descr,
+        `Assignment Level` = `Level (City)`,
+        `Min Salary` = min_rate,
+        `Max Salary` = max_rate
+      )
+    ]
+  )  %>% 
+    gt::fmt_currency(columns = c(`Min Salary`, `Max Salary`), currency = "USD", decimals = 0)
+
+
+```
