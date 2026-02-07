@@ -149,6 +149,8 @@ Agency Attorneys are used here as the closest citywide proxy for Legislative Cou
 
 Salaries are set using defined levels and increase with tenure. See @nyc_position_schedule.
 
+Bargaining implication: City ranges exceed Council medians at comparable levels; Council Legislative Counsel salaries are not competitive for licensed attorneys performing equivalent work.
+
 ```{r}
 cst_range[, experience := fcase(
   asg_lvl == "01", "0 years",

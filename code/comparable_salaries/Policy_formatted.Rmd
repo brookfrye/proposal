@@ -107,7 +107,9 @@ The Staff Analyst track includes two (non-managerial) titles:
 -   Staff Analyst (levels I and II)
 -   Associate Staff Analyst
 
-We remove Staff Analyst level I because the responsibilities and qualifications are considerably less than that of a Legislative Policy Analyst and use Staff Analyst level II as the level most comparable to Legislative Policy Analyst. We use Associate Staff analyst as the most comparable City title to Senior Legislative Policy Analyst.
+We remove Staff Analyst level I because the responsibilities and qualifications are considerably less than that of a Legislative Policy Analyst and use Staff Analyst level II as the level most comparable to Legislative Policy Analyst. We use Associate Staff Analyst as the most comparable City title to Senior Legislative Policy Analyst.
+
+Bargaining implication: City titles provide higher ranges and clearer progression; Council policy analysts are paid below equivalent City roles.
 
 ```{r}
 cst_range$experience <- c("Master's Degree + 1 year relevant experience (or Bachelor's with 3 years relevant experience)", "Master's Degree + 2 years relevant experience (or Bachelor's with 4 years relevant experience)")

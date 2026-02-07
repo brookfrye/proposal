@@ -131,6 +131,8 @@ NYC Jobs postings for Computer Specialist (Software) II and Computer Specialist 
 
 Level I is excluded because it often functions as an entry/trainee tier, while Council web roles generally require independent delivery and ongoing application ownership.
 
+Bargaining implication: City Computer Specialist (Software) ranges exceed Council web developer medians, indicating a persistent gap for comparable technical work.
+
 ```{r}
 
 
