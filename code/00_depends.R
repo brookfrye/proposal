@@ -2,11 +2,6 @@ library(vroom)
 library(data.table)
 library(ggplot2)
 library(lubridate)
-library(lme4)
-library(data.table)
-library(lubridate)
-library(mclust)
-library(scales)
 library(scales)
 library(stringr)
 library(gt)
@@ -17,6 +12,27 @@ library(rprojroot)
 # civil service titls 
 # jobs api 
 
+dep_titles <- c("DEPUTY DIRECTOR", "ASSISTANT DIRECTOR OF LEGAL SERVICES")
+bu_titles <- c("LEGISLATIVE POLICY ANALYST", "SENIOR LEGISLATIVE POLICY ANALYST", "LEGISLATIVE PROGRAMMER/ANALYST", "LEGISLATIVE COUNSEL")
+
+counsel_rm <- 
+   c("abid hossain"  
+  , "brian-philippe parcon" 
+  , "andres madrid"
+  ,"danielle barbato" 
+  ,"xi chen" 
+  ,"luciano hamel"         
+  ,"john o'rourke"
+  ,"pearl moore"           
+  ,"matthew distefano"     
+  ,"david francis"
+  ,"jeffrey campagna" 
+  ,"daniel matza-brown"    
+  ,"amanda delgrosso" 
+  ,"chotsani sackey"
+  ,"natasha bynum"         
+  ,"nnamdia gooding")
+  
 deps <- c("johanna castro-campusan", "rachel cordero",         
           "wesley jones",           
           "alaa moussawi",          
@@ -59,6 +75,7 @@ data_staff <- c("BROOKE FRYE",
                 "ERIK BROWN", 
                 "DANYLO ORLOV", 
                 "TAYLOR FRANCISCO")
+
 web_staff <- c("ENAN RAHMAN", 
                "JOYCE LI", 
                "YULIN SHEN", 
@@ -72,6 +89,11 @@ web_staff <- c("ENAN RAHMAN",
                "RYAN KERINS",
                "OMAR KHALIL", 
                "ANTHONY TAYLOR")
+
+data <- "CITY RESEARCH SCIENTIST"
+
+web <- c("COMPUTER SPECIALIST", "COMPUTER SPECIALIST (SOFTWARE)")
+
 policy <- c("ADMINISTRATIVE STAFF ANALYST",
             "ASSOCIATE STAFF ANALYST", 
             "LEGISLATIVE POLICY ANALYST",

@@ -1,188 +1,156 @@
 library(data.table)
 library(rprojroot)
-library(jsonlite)
+library(ggplot2)
+library(scales)
 
 root_dir <- find_root(has_file("proposal.Rproj"))
 data_dir <- file.path(root_dir, "data")
-dir.create(data_dir, showWarnings = FALSE, recursive = TRUE)
 source(file.path(root_dir, "code", "00_depends.R"))
+base_url <- "https://data.cityofnewyork.us/resource/k397-673e.csv"
+# Pull all columns for City Council, FY >= 2018
+query <- paste0(
+  "?", 
+  "$where=agency_name%20%3D%20%27CITY%20COUNCIL%27%20AND%20fiscal_year%20%3E%3D%202018",
+  "&$limit=1000000"
+)
+pay <- fread(paste0(base_url, query))
+pay[, full_name := tolower(paste(first_name, last_name, sep = " "))]
+pay <- pay[!full_name %in% counsel_rm]
 
-# ---- Config ----
-DATASET_ID <- "k397-673e"
-BASE_URL <- sprintf("https://data.cityofnewyork.us/resource/%s.csv", DATASET_ID)
-COLUMNS_URL <- sprintf("https://data.cityofnewyork.us/api/views/%s/columns.json", DATASET_ID)
-APP_TOKEN <- Sys.getenv("SOCRATA_APP_TOKEN", unset = "")
+# ---- Active only ----
+act <- pay[leave_status_as_of_june_30 == "ACTIVE"]
+act2 <- act[title_description %in% c(bu_titles, dep_titles)]
 
-FY_START <- 2018L
-FY_END <- 2025L
-AGENCY_EXACT <- "CITY COUNCIL"
-ACTIVE_LABEL <- "ACTIVE"
+# ---- Remove Deputy Directors not in leg ----
+leg <- act2[!(title_description == "DEPUTY DIRECTOR" &
+    !(full_name %chin% deps)), ]
 
-# Explicit bargaining unit titles provided by user
+leg[, group := ifelse(title_description %in% bu_titles, "bu", "manager")]
 
+# ---- Short legend labels (row-level) ----
+leg[, title_short := fcase(
+  title_description == "LEGISLATIVE POLICY ANALYST",        "Policy Analyst",
+  title_description == "SENIOR LEGISLATIVE POLICY ANALYST", "Sr Policy Analyst",
+  title_description == "LEGISLATIVE PROGRAMMER/ANALYST",    "Programmer/Analyst",
+  title_description == "LEGISLATIVE COUNSEL",               "Leg Counsel",
+  title_description == "DEPUTY DIRECTOR",                   "Deputy Director",
+  title_description == "ASSISTANT DIRECTOR OF LEGAL SERVICES","Asst Dep",
+  default = title_description
+)]
 
-PAGE_SIZE <- 50000L
-MAX_PAGES <- 200L
+leg[, legend_label := fcase(
+  group == "bu",      paste0("Union: ", title_short),
+  group == "manager", paste0("Mgr: ",   title_short)
+)]
 
-# ---- Helpers ----
-get_columns <- function(url) {
-  cols <- fromJSON(url, simplifyDataFrame = TRUE)
-  as.data.table(cols)
-}
+# fwrite(leg, "data/active_city_council_2018-2025.csv")
+# ---- Trend (median ONLY by year + title) ----
+trend_core <- leg[
+  , .(median_base_salary = median(base_salary, na.rm = TRUE), n = .N),
+  by = .(fiscal_year, title_description)
+][order(title_description, fiscal_year)]
+View(trend_core)
+View(leg)
+# ---- Title lookup (bring back group + legend_label without affecting medians) ----
+title_lu <- unique(leg[, .(title_description, group, legend_label)])
 
-field_from_name <- function(cols, patterns, required = TRUE) {
-  hit <- rep(FALSE, nrow(cols))
-  for (p in patterns) {
-    hit <- hit | grepl(p, cols$name, ignore.case = TRUE)
-  }
-  idx <- which(hit)
-  if (length(idx) == 0L) {
-    if (required) stop(sprintf("No column matched patterns: %s", paste(patterns, collapse = ", ")))
-    return(NA_character_)
-  }
-  cols$fieldName[idx[1]]
-}
+# Optional sanity check: each title should map to exactly one group/label
+# stopifnot(title_lu[, .N, by = title_description][, all(N == 1)])
 
-make_url <- function(base, select_cols, where_clause, limit, offset, app_token = "") {
-  q <- list(
-    "$select" = paste(select_cols, collapse = ","),
-    "$where" = where_clause,
-    "$limit" = limit,
-    "$offset" = offset
-  )
-  if (nzchar(app_token)) q[["$$app_token"]] <- app_token
-  # Manual query build to avoid dependencies
-  query <- paste(
-    vapply(names(q), function(k) {
-      sprintf("%s=%s", k, utils::URLencode(as.character(q[[k]]), reserved = TRUE))
-    }, character(1)),
-    collapse = "&"
-  )
-  paste0(base, "?", query)
-}
+trend <- title_lu[trend_core, on = "title_description"]
 
-soda_get_all <- function(base, select_cols, where_clause, page_size = 50000L,
-                         max_pages = 200L, app_token = "", verbose = TRUE) {
-  out <- list()
-  offset <- 0L
-  for (i in seq_len(max_pages)) {
-    url <- make_url(base, select_cols, where_clause, page_size, offset, app_token)
-    dt <- tryCatch(
-      fread(url, showProgress = FALSE),
-      error = function(e) NULL
-    )
-    if (is.null(dt) || nrow(dt) == 0L) break
-    out[[i]] <- dt
-    if (verbose) message(sprintf("page %d: n=%d (offset=%d)", i, nrow(dt), offset))
-    if (nrow(dt) < page_size) break
-    offset <- offset + page_size
-  }
-  rbindlist(out, use.names = TRUE, fill = TRUE)
-}
+# ---- Color palettes: BU blues, manager reds ----
+labs_bu  <- unique(trend[group == "bu", legend_label])
+labs_mgr <- unique(trend[group == "manager", legend_label])
 
-# ---- Column discovery ----
-cols <- get_columns(COLUMNS_URL)
-
-col_fy <- field_from_name(cols, c("^fiscal year$", "fiscal year"))
-col_agency <- field_from_name(cols, c("^agency name$", "agency"))
-col_title <- field_from_name(cols, c("title description", "job title", "title"))
-col_status <- field_from_name(cols, c("leave status", "status"), required = FALSE)
-col_base <- field_from_name(cols, c("base salary", "base"))
-col_bu <- field_from_name(cols, c("bargaining unit", "bargain"), required = FALSE)
-col_first <- field_from_name(cols, c("^first name$", "first name"), required = FALSE)
-col_last <- field_from_name(cols, c("^last name$", "last name"), required = FALSE)
-col_mid <- field_from_name(cols, c("^mid init$", "middle", "mid"), required = FALSE)
-
-select_cols <- unique(na.omit(c(
-  col_fy, col_agency, col_title, col_status, col_base, col_bu, col_first, col_last, col_mid
-)))
-
-# ---- Download (prefer agency filter, fallback if empty) ----
-where_base <- sprintf("%s >= %d AND %s <= %d", col_fy, FY_START, col_fy, FY_END)
-where_with_agency <- sprintf("%s AND upper(%s) = '%s'", where_base, col_agency, toupper(AGENCY_EXACT))
-
-pay <- soda_get_all(
-  base = BASE_URL,
-  select_cols = select_cols,
-  where_clause = where_with_agency,
-  page_size = PAGE_SIZE,
-  max_pages = MAX_PAGES,
-  app_token = APP_TOKEN,
-  verbose = TRUE
+pal_bu <- setNames(
+  hcl(h = 210, c = 80, l = seq(35, 70, length.out = max(1, length(labs_bu)))),
+  labs_bu
+)
+pal_mgr <- setNames(
+  hcl(h = 10, c = 85, l = seq(35, 70, length.out = max(1, length(labs_mgr)))),
+  labs_mgr
 )
 
-if (nrow(pay) == 0L) {
-  message("No rows with exact agency match; retrying without agency filter and filtering locally.")
-  pay <- soda_get_all(
-    base = BASE_URL,
-    select_cols = select_cols,
-    where_clause = where_base,
-    page_size = PAGE_SIZE,
-    max_pages = MAX_PAGES,
-    app_token = APP_TOKEN,
-    verbose = TRUE
+color_values <- c(pal_bu, pal_mgr)
+
+# ---- Plot (leave as is) ----
+p <- ggplot(trend, aes(fiscal_year, median_base_salary, color = legend_label, group = legend_label)) +
+  geom_line(linewidth = 1.05, alpha = 0.9) +
+  geom_point(size = 2.2, alpha = 0.95) +
+  scale_color_manual(values = color_values, name = "Title") +
+  scale_y_continuous(labels = dollar_format(accuracy = 1), expand = expansion(mult = c(0.02, 0.06))) +
+  scale_x_continuous(breaks = sort(unique(trend$fiscal_year))) +
+  labs(
+    title = "City Council median base salary by title",
+    subtitle = "Active employees, FY 2018-2025",
+    x = "Fiscal year",
+    y = "Median base salary"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(face = "bold"),
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 8.8),
+    legend.position = "right"
   )
-}
 
-# ---- Standardize columns ----
-pay[, fiscal_year := as.integer(get(col_fy))]
-pay[, agency_name := as.character(get(col_agency))]
-pay[, title_description := as.character(get(col_title))]
-if (!is.na(col_status)) pay[, status := as.character(get(col_status))]
-pay[, base_salary := as.numeric(get(col_base))]
-if (!is.na(col_first)) pay[, first_name := as.character(get(col_first))]
-if (!is.na(col_last)) pay[, last_name := as.character(get(col_last))]
-if (!is.na(col_mid)) pay[, mid_init := as.character(get(col_mid))]
+p
 
-# If agency filter was skipped or too broad, filter locally
-if (nrow(pay) > 0L) {
-  pay <- pay[grepl("^CITY COUNCIL$", toupper(agency_name))]
-}
+# y_min <- 50000
+# y_max <- ceiling(max(trend$median_base_salary, na.rm = TRUE) / 50000) * 50000
+# p <- ggplot(trend, aes(fiscal_year, median_base_salary, color = legend_label, group = legend_label)) +
+#   geom_line(linewidth = 1.05, alpha = 0.9) +
+#   geom_point(size = 2.2, alpha = 0.95) +
+#   scale_color_manual(values = color_values, name = "Title") +
+#   scale_y_continuous(
+#     labels = dollar_format(accuracy = 1),
+#     limits = c(0, y_max),                 # <-- key change
+#     breaks = seq(0, y_max, by = 25000),   # <-- clearer ticks
+#     expand = expansion(mult = c(0, 0.03))
+#   ) +
+#   scale_x_continuous(breaks = sort(unique(trend$fiscal_year))) +
+#   labs(
+#     title = "City Council median base salary by title",
+#     subtitle = "Active employees only; Deputy Directors limited to approved list",
+#     x = "Fiscal year",
+#     y = "Median base salary"
+#   ) +
+#   theme_minimal(base_size = 12) +
+#   theme(
+#     panel.grid.minor = element_blank(),
+#     plot.title = element_text(face = "bold"),
+#     legend.title = element_text(size = 10),
+#     legend.text = element_text(size = 8.8)
+#   )
+# p <- p +
+#   scale_y_continuous(
+#     limits = c(y_min, y_max),
+#     breaks = seq(y_min, y_max, by = 50000),
+#     labels = dollar_format(accuracy = 1),
+#     expand = expansion(mult = c(0, 0.03))
+#   )
 
-# Active employees only
-if ("status" %in% names(pay)) {
-  pay <- pay[toupper(status) == ACTIVE_LABEL]
-} else {
-  message("No status column found; skipping active-only filter.")
-}
 
-# Explicit bargaining unit classification from title list
-pay[, title_upper := toupper(title_description)]
-pay[, is_bu := title_upper %in% BU_TITLES]
+p
+ggsave(file.path(root_dir, "code", "images", "cc_median_salary_by_titles.png"),
+       p, width = 12, height = 7, dpi = 300)
 
-# Manager definition (title must include deputy/director AND name in assistant deputy list)
-manager_names <- unique(tolower(ass_deps))
-pay[, full_name := tolower(trimws(paste(first_name, last_name)))]
-pay[, is_manager := grepl("(ASSISTANT\\s+DEPUTY\\s+DIRECTOR|ASST\\.?\\s+DEPUTY\\s+DIRECTOR|DEPUTY\\s+DIRECTOR)", title_upper) &
-                    (full_name %in% manager_names)]
 
-# Grouping: manager vs bargaining unit (non-overlapping)
-pay[, group := fifelse(is_manager, "Manager",
-                       fifelse(is_bu, "Bargaining unit", NA_character_))]
-
-pay <- pay[!is.na(group)]
-
-# ---- Outputs ----
-raw_path <- file.path(data_dir, "city_council_payroll_2018_2025.csv")
-fwrite(pay, raw_path)
-
-by_year <- pay[, .(
-  n = .N,
-  median_base_salary = median(base_salary, na.rm = TRUE)
-), by = .(fiscal_year, group)]
-
-by_year_path <- file.path(data_dir, "city_council_bu_vs_manager_median_by_year.csv")
-fwrite(by_year, by_year_path)
-
-by_title_year <- pay[, .(
-  n = .N,
-  median_base_salary = median(base_salary, na.rm = TRUE)
-), by = .(fiscal_year, group, title_description)]
-
-by_title_year_path <- file.path(data_dir, "city_council_bu_vs_manager_median_by_title_year.csv")
-fwrite(by_title_year, by_title_year_path)
-
-message("Wrote:")
-message(raw_path)
-message(by_year_path)
-message(by_title_year_path)
+# counsel in leg
+# "johari frasier"        "joshua kingsley"       "pauline syrnik"       
+# "margaret lyford"       "austin malone"         "matthew hill"         
+#       
+# "declan mcpherson"      "kristoffer sartori"   
+# "aminta kilawan"        
+#  "deborah kerzhner"      "nicholas widzowski"    "alex paulenoff"       
+#        "christopher pepe"     
+#         "jayasri ganapathy"     "irene byhovsky"       
+#                 "sara sucher"           "nicole cata"          
+#  "elliot heisler"        "jeremy whiteman"       "julia goldsmith-pinkh"
+#  "nadia jean-francois"   "sarah swaine"          "christina yellamaty"  
+#         "rie ogasawara"        
+#  "morganne barrett"      "rachel conte"          
+#           "sierra townsend"      
+#          "alex khan"            
